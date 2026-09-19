@@ -116,6 +116,9 @@ jobs:
           path: /home/runner/.ccache
           key: ccache-odin-${{ github.run_id }}
           restore-keys: ccache-odin-
+          # keep the object cache from failed runs too, so a second attempt
+          # does not recompile the whole tree
+          save-always: true
 
       - name: Fetch Android NDK
         env:
