@@ -69,6 +69,18 @@ jobs:
           done
           git log --oneline -6
 
+      - name: Backport susfs thread-flag helpers needed by current ReSukiSU
+        run: |
+          # susfs 2.1.0 (the version carried on the resukisu branch) predates the
+          # TIF_PROC_NO_SU / TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT helpers that current
+          # ReSukiSU calls from its execve and setuid hooks. They are header-only
+          # thread-flag accessors, so the numbers and bodies are taken verbatim
+          # from susfs4ksu upstream.
+          git apply -v .github/susfs-def-thread-flags.patch
+          git add include/linux/susfs_def.h
+          git commit -m "susfs: Add thread-flag helpers used by current ReSukiSU" || true
+          grep -nE 'TIF_PROC_NO_SU|TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT' include/linux/susfs_def.h
+
       - name: Switch KernelSU to ${{ github.event.inputs.resukisu_ref }}
         run: |
           rm -rf KernelSU
