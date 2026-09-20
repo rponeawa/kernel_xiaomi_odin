@@ -15,6 +15,10 @@ on:
         description: "Push the integrated tree to odin-ois-integrated"
         required: true
         default: "true"
+      with_resukisu:
+        description: "Layer ReSukiSU and susfs on top (false builds a bare kernel)"
+        required: true
+        default: "true"
 
 env:
   DEVICE: odin
@@ -55,6 +59,7 @@ jobs:
           git log --oneline -1
 
       - name: Cherry-pick ReSukiSU integration from the resukisu branch
+        if: ${{ github.event.inputs.with_resukisu == 'true' }}
         run: |
           git fetch --no-tags origin resukisu:refs/remotes/origin/resukisu
           for c in $KSU_COMMITS; do
@@ -72,6 +77,7 @@ jobs:
           git log --oneline -6
 
       - name: Backport susfs thread-flag helpers needed by current ReSukiSU
+        if: ${{ github.event.inputs.with_resukisu == 'true' }}
         run: |
           # susfs 2.1.0 (the version carried on the resukisu branch) predates the
           # TIF_PROC_NO_SU / TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT helpers that current
@@ -84,6 +90,7 @@ jobs:
           grep -nE 'TIF_PROC_NO_SU|TIF_PROC_UMOUNTED_FOR_ZYGOTE_NEXT' include/linux/susfs_def.h
 
       - name: Switch KernelSU to ${{ github.event.inputs.resukisu_ref }}
+        if: ${{ github.event.inputs.with_resukisu == 'true' }}
         run: |
           rm -rf KernelSU
           git clone https://github.com/ReSukiSU/ReSukiSU KernelSU
@@ -94,10 +101,16 @@ jobs:
           git add KernelSU
           git commit -m "drivers: Update ReSukiSU to ${{ github.event.inputs.resukisu_ref }}" || true
 
-      - name: Enable ReSukiSU in defconfig
+      - name: Set kernel local version
         run: |
           DC="arch/arm64/configs/$DEFCONFIG"
           sed -i 's/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION="-inkypen-ois"/' "$DC"
+          git add "$DC" && git commit -m "arm64: configs: Tag local version" || true
+
+      - name: Enable ReSukiSU in defconfig
+        if: ${{ github.event.inputs.with_resukisu == 'true' }}
+        run: |
+          DC="arch/arm64/configs/$DEFCONFIG"
           printf '\n' >> "$DC"
           cat .github/ksu.fragment >> "$DC"
           git add "$DC"
@@ -146,7 +159,12 @@ jobs:
             CC="ccache clang" HOSTCC="ccache clang" LLVM=1 LLVM_IAS=1 "$DEFCONFIG"
           echo "--- resolved config ---"
           grep -E '^CONFIG_(KSU|KSU_SUSFS|LOCALVERSION)=' "$OUT_DIR/.config" | head -20
-          grep -q '^CONFIG_KSU=y' "$OUT_DIR/.config" || { echo "CONFIG_KSU did not survive olddefconfig"; exit 1; }
+          if [ "${{ github.event.inputs.with_resukisu }}" = "true" ]; then
+            grep -q '^CONFIG_KSU=y' "$OUT_DIR/.config" || { echo "CONFIG_KSU did not survive olddefconfig"; exit 1; }
+          else
+            grep -q '^CONFIG_KSU=y' "$OUT_DIR/.config" && { echo "bare build still has CONFIG_KSU"; exit 1; }
+            echo "bare build confirmed: no CONFIG_KSU"
+          fi
 
       - name: Build kernel and modules
         run: |
@@ -191,8 +209,12 @@ jobs:
           echo "packaged $(ls AnyKernel3/vendor_modules/*.ko | wc -l) modules"
 
           KREL=$(cat "$OUT_DIR/include/config/kernel.release" 2>/dev/null || echo 5.4.302)
-          KSUVER=$(cd KernelSU && git describe --tags --always 2>/dev/null || echo unknown)
-          NAME="Odin-${KREL}-ReSukiSU-${KSUVER}-OIS.zip"
+          if [ "${{ github.event.inputs.with_resukisu }}" = "true" ]; then
+            KSUVER=$(cd KernelSU && git describe --tags --always 2>/dev/null || echo unknown)
+            NAME="Odin-${KREL}-ReSukiSU-${KSUVER}-OIS.zip"
+          else
+            NAME="Odin-${KREL}-stock-OIS.zip"
+          fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
           cd AnyKernel3
@@ -212,7 +234,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Push integrated tree
-        if: ${{ github.event.inputs.push_branch == 'true' }}
+        if: ${{ github.event.inputs.push_branch == 'true' && github.event.inputs.with_resukisu == 'true' }}
         continue-on-error: true
         run: git push -f origin HEAD:refs/heads/odin-ois-integrated
 
