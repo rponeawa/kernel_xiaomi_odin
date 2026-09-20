@@ -30,6 +30,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    permissions:
+      contents: write
 
     steps:
       - name: Free disk space
@@ -111,14 +113,11 @@ jobs:
             python3 rsync p7zip-full
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.ccache
           key: ccache-odin-${{ github.run_id }}
           restore-keys: ccache-odin-
-          # keep the object cache from failed runs too, so a second attempt
-          # does not recompile the whole tree
-          save-always: true
 
       - name: Fetch Android NDK
         env:
@@ -201,15 +200,8 @@ jobs:
           cd ..
           ls -lh "$NAME"
 
-      - name: Push integrated tree
-        if: ${{ github.event.inputs.push_branch == 'true' }}
-        run: git push -f origin HEAD:refs/heads/odin-ois-integrated
-
-      - name: ccache stats
-        if: always()
-        run: ccache -s
-
       - name: Upload flashable zip
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.DEVICE }}-kernel-ois-${{ github.run_number }}
@@ -217,4 +209,20 @@ jobs:
             *.zip
             build.log
           retention-days: 30
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Push integrated tree
+        if: ${{ github.event.inputs.push_branch == 'true' }}
+        continue-on-error: true
+        run: git push -f origin HEAD:refs/heads/odin-ois-integrated
+
+      - name: ccache stats
+        if: always()
+        run: ccache -s
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.ccache
+          key: ccache-odin-${{ github.run_id }}
