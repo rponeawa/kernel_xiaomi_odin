@@ -23,15 +23,15 @@ supported.vendorpatchlevels=
 ### AnyKernel install
 ## boot files attributes
 boot_attributes() {
-set_perm_recursive 0 0 755 644 $ramdisk/*;
-set_perm_recursive 0 0 750 750 $ramdisk/init* $ramdisk/sbin;
+set_perm_recursive 0 0 755 644 $RAMDISK/*;
+set_perm_recursive 0 0 750 750 $RAMDISK/init* $RAMDISK/sbin;
 } # end attributes
 
 # boot shell variables
-block=boot;
-is_slot_device=1;
-ramdisk_compression=auto;
-patch_vbmeta_flag=auto;
+BLOCK=boot;
+IS_SLOT_DEVICE=1;
+RAMDISK_COMPRESSION=auto;
+PATCH_VBMETA_FLAG=auto;
 
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh;
@@ -42,13 +42,13 @@ write_boot;
 ## end boot install
 
 ## vendor kernel modules install
-# The camera driver (camera.ko) lives in /vendor/lib/modules and is loaded by
-# vendor_init long before any systemless overlay exists, so it is written to
-# the vendor partition directly. Existing files are overwritten in place with
-# cat so their SELinux context and ownership are preserved.
+# camera.ko lives in /vendor/lib/modules and is loaded by vendor_init long
+# before any systemless overlay exists, so it is written to the vendor
+# partition directly. Existing files are overwritten in place with cat so
+# their SELinux context and ownership are preserved.
 install_vendor_modules() {
   local src cnt miss m base;
-  src=$home/vendor_modules;
+  src=$AKHOME/vendor_modules;
   [ -d "$src" ] || return 0;
 
   ui_print " ";
